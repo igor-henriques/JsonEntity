@@ -36,5 +36,6 @@ Methods available:
   * UpdateAsync
   * AnyAsync
   * LastOrDefaultAsync
+  * WhereAsync
   
   This library works by using Stream, instead loading the entire json file, saving memory and better performance therefore
