@@ -17,7 +17,17 @@ await Host.CreateDefaultBuilder()
 ```
 PS.: the library do NOT create the json file, either the necessary directories. Make sure to create yourself.
 
-2. Get the IJsonController<T> from the dependency injection, like this:
+2. Create an inheritance from IBaseJsonEntity into all your entities, which makes you implement the `long Id` property:
+``` C#
+internal record Produto : IBaseJsonEntity
+{
+    public long Id { get; init; }
+    public string Nome { get; init; }
+    public decimal ValorUnitario { get; init; }
+}
+```
+
+3. Get the IJsonController<T> from the dependency injection, like this:
 ``` C#
 private readonly IJsonController<Produto> produtoContext;
 
