@@ -12,9 +12,8 @@ public interface IJsonController<T> where T : IBaseJsonEntity, new()
     /// <summary>
     /// Convert all entities in the provided json into a List<T>
     /// </summary>
-    /// <param name="condition"></param>
     /// <returns></returns>
-    Task<List<T>> ToListAsync(Func<T, bool> condition = null);
+    Task<List<T>> ToListAsync();
 
     /// <summary>
     /// Produces the difference between the provided collection and the entities into the json file
@@ -62,4 +61,11 @@ public interface IJsonController<T> where T : IBaseJsonEntity, new()
     /// <param name="condition"></param>
     /// <returns></returns>
     Task<T> LastOrDefaultAsync(Func<T, bool> condition = null);
+
+    /// <summary>
+    /// Seek for all entities which satisfies the specified condition
+    /// </summary>
+    /// <param name="condition"></param>
+    /// <returns></returns>
+    Task<IEnumerable<T>> WhereAsync(Func<T, bool> condition);
 }
