@@ -43,7 +43,7 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task UpdateAsync(T entity, bool verbose = false)
     {
-        using (var tempFile = File.Create(jsonPath + ".temp"))
+        using (var tempFile = File.Create(string.Concat(jsonPath, ".temp")))
         {
             using var fileStream = File.OpenRead(jsonPath);
 
@@ -64,7 +64,7 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
 
         File.Delete(jsonPath);
 
-        File.Move(jsonPath + ".temp", jsonPath);
+        File.Move(string.Concat(jsonPath, ".temp"), jsonPath);
 
         if (verbose)
             Console.WriteLine($"Record {entity} updated");
@@ -78,7 +78,7 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task RemoveAsync(Func<T, bool> condition, bool verbose = false)
     {
-        using (var tempFile = File.Create(jsonPath + ".temp"))
+        using (var tempFile = File.Create(string.Concat(jsonPath, ".temp")))
         {
             using var fileStream = File.OpenRead(jsonPath);
 
@@ -104,7 +104,7 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
 
         File.Delete(jsonPath);
 
-        File.Move(jsonPath + ".temp", jsonPath);
+        File.Move(string.Concat(jsonPath, ".temp"), jsonPath);
 
         if (verbose)
             Console.WriteLine($"Records removed");
