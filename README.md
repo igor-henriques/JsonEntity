@@ -10,9 +10,16 @@ Implementation of LINQ-based entity to json file
 await Host.CreateDefaultBuilder()
     .ConfigureServices(services =>
     {
-        services.AddSingleton<IJsonController<Estoque>, JsonController<Estoque>>(x => new JsonController<Estoque>(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Estoque.json")));
-        services.AddSingleton<IJsonController<Produto>, JsonController<Produto>>(x => new JsonController<Produto>(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Produto.json")));
-        services.AddSingleton<IJsonController<Venda>, JsonController<Venda>>(x => new JsonController<Venda>(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Venda.json")));        
+    
+        services.AddSingleton(_ => JsonEntityConfiguration<Estoque>.Create(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Estoque.json")));
+        services.AddScoped<IJsonController<Estoque>, JsonController<Estoque>>();
+        
+        services.AddSingleton(_ => JsonEntityConfiguration<Produto>.Create(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Produto.json")));
+        services.AddScoped<IJsonController<Produto>, JsonController<Produto>>();
+        
+        services.AddSingleton(_ => JsonEntityConfiguration<Venda>.Create(Path.Combine(Directory.GetCurrentDirectory(), "Data", "Venda.json")));
+        services.AddScoped<IJsonController<Venda>, JsonController<Venda>>();
+        
     }).Build().RunAsync();
 ```
 PS.: the library do NOT create the json file, either the necessary directories. Make sure to create yourself.
