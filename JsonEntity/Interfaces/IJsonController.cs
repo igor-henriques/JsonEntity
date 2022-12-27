@@ -29,16 +29,24 @@ public interface IJsonController<T> where T : IBaseJsonEntity, new()
     /// <param name="condition"></param>
     /// <param name="verbose"></param>
     /// <returns></returns>
-    Task RemoveAsync(Func<T, bool> condition, bool verbose = false);
+    Task RemoveAsync(
+        Func<T, bool> condition,
+        bool verbose = false,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Insert an entity into the provided json file, with an overload to generate sequential identity. Doesn't check for unique.
+    /// Insert an entity into the provided json file, with an overload to generate sequential identity. Check for uniqueness if generateSequentialId is false.
     /// </summary>
     /// <param name="entity"></param>
     /// <param name="verbose"></param>
     /// <param name="generateSequentialId"></param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task InsertAsync(T entity, bool verbose = false, bool generateSequentialId = false);
+    Task<T> InsertAsync(
+        T entity, 
+        bool verbose = false, 
+        bool generateSequentialId = false, 
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// References the entity ID field to update it into the json file
@@ -46,7 +54,10 @@ public interface IJsonController<T> where T : IBaseJsonEntity, new()
     /// <param name="entity"></param>
     /// <param name="verbose"></param>
     /// <returns></returns>
-    Task UpdateAsync(T entity, bool verbose = false);
+    Task UpdateAsync(
+        T entity, 
+        bool verbose = false,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Verifies if there's any entity in the json file with the provided match

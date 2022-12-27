@@ -2,14 +2,18 @@
 
 public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEntity, new()
 {
-    private readonly string jsonPath;
+    private readonly string _jsonPath;
+    private readonly ILogger<JsonController<T>> _logger;
 
-    public JsonController(string jsonPath)
+    public JsonController(
+        JsonEntityConfiguration<T> configuration,
+        ILogger<JsonController<T>> logger)
     {
-        if (!Directory.Exists(Directory.GetParent(jsonPath).FullName))
-            throw new ArgumentException($"Directory {Directory.GetParent(jsonPath).FullName} don't exist");
+        if (!Directory.Exists(Directory.GetParent(configuration.JsonPath).FullName))
+            throw new ArgumentException($"Directory {Directory.GetParent(configuration.JsonPath).FullName} don't exist");
 
-        this.jsonPath = jsonPath;
+        this._jsonPath = configuration.JsonPath;
+        this._logger = logger;
     }
 
     /// <summary>
@@ -19,20 +23,29 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <param name="verbose"></param>
     /// <param name="generateSequentialId"></param>
     /// <returns></returns>
-    public async Task InsertAsync(T entity, bool generateSequentialId = false, bool verbose = false)
+    public async Task<T> InsertAsync(
+        T entity,
+        bool generateSequentialId = false,
+        bool verbose = false,
+        CancellationToken cancellationToken = default)
     {
         if (generateSequentialId)
         {
-            using (var fileStream = File.OpenRead(jsonPath))
-            {
-                entity.Id = CountLines(fileStream);
-            }
+            using var fileStream = File.OpenRead(_jsonPath);
+            entity.Id = CountLines(fileStream);
+        }
+        else
+        {
+            if (await this.AnyAsync(x => x.Id.Equals(entity.Id)))
+                throw new Exception($"Key violation: Id {entity.Id} already exists");
         }
 
-        await File.AppendAllTextAsync(jsonPath, JsonConvert.SerializeObject(entity) + "\n");
+        await File.AppendAllTextAsync(_jsonPath, JsonConvert.SerializeObject(entity).Trim() + "\n", cancellationToken);
 
         if (verbose)
-            Console.WriteLine($"Record {entity} inserted");
+            _logger.LogInformation("Record {entity} inserted", entity);
+
+        return entity;
     }
 
     /// <summary>
@@ -41,33 +54,37 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <param name="entity"></param>
     /// <param name="verbose"></param>
     /// <returns></returns>
-    public async Task UpdateAsync(T entity, bool verbose = false)
+    public async Task UpdateAsync(
+        T entity,
+        bool verbose = false,
+        CancellationToken cancellationToken = default)
     {
-        using (var tempFile = File.Create(string.Concat(jsonPath, ".temp")))
+        using (var tempFile = File.Create(string.Concat(_jsonPath, ".temp")))
         {
-            using var fileStream = File.OpenRead(jsonPath);
-
+            using var fileStream = File.OpenRead(_jsonPath);
             using var streamReader = new StreamReader(fileStream);
-
             using var streamWriter = new StreamWriter(tempFile);
 
-            T currentObject = default(T);
+            T currentObject = default;
 
             while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
             {
                 if (verbose)
-                    Console.WriteLine($"Updating record from {currentObject} to {entity}");
+                    _logger.LogInformation("Updating record from {currentObject} to {entity}", currentObject, entity);
+                
+                ReadOnlyMemory<char> objSerialized = MemoryExtensions.AsMemory(JsonConvert.SerializeObject(currentObject.Id.Equals(entity.Id) ? entity : currentObject));
 
-                await streamWriter.WriteLineAsync(JsonConvert.SerializeObject(currentObject.Id.Equals(entity.Id) ? entity : currentObject));
+                await streamWriter.WriteLineAsync(
+                    objSerialized,
+                    cancellationToken);
             }
         }
 
-        File.Delete(jsonPath);
-
-        File.Move(string.Concat(jsonPath, ".temp"), jsonPath);
+        File.Delete(_jsonPath);
+        File.Move(string.Concat(_jsonPath, ".temp"), _jsonPath);
 
         if (verbose)
-            Console.WriteLine($"Record {entity} updated");
+            _logger.LogInformation("Record {entity} updated", entity);
     }
 
     /// <summary>
@@ -76,52 +93,51 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <param name="condition"></param>
     /// <param name="verbose"></param>
     /// <returns></returns>
-    public async Task RemoveAsync(Func<T, bool> condition, bool verbose = false)
+    public async Task RemoveAsync(
+        Func<T, bool> condition,
+        bool verbose = false,
+        CancellationToken cancellationToken = default)
     {
-        using (var tempFile = File.Create(string.Concat(jsonPath, ".temp")))
+        using (var tempFile = File.Create(string.Concat(_jsonPath, ".temp")))
         {
-            using var fileStream = File.OpenRead(jsonPath);
-
+            using var fileStream = File.OpenRead(_jsonPath);
             using var streamReader = new StreamReader(fileStream);
-
             using var tempWriter = new StreamWriter(tempFile);
 
-            T currentObject = default(T);
+            T currentObject = default;
 
             while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
             {
                 if (!condition.Invoke(currentObject))
                 {
-                    await tempWriter.WriteLineAsync(JsonConvert.SerializeObject(currentObject));
+                    ReadOnlyMemory<char> objSerialized = MemoryExtensions.AsMemory(JsonConvert.SerializeObject(currentObject));
+                    await tempWriter.WriteLineAsync(objSerialized, cancellationToken);
                 }
-                else
+                else if (verbose)
                 {
-                    if (verbose)
-                        Console.WriteLine($"Removing record {currentObject}");
+                    _logger.LogInformation("Record {currentObject} removed", currentObject);
                 }
             }
         }
 
-        File.Delete(jsonPath);
-
-        File.Move(string.Concat(jsonPath, ".temp"), jsonPath);
+        File.Delete(_jsonPath);
+        File.Move(string.Concat(_jsonPath, ".temp"), _jsonPath);
 
         if (verbose)
-            Console.WriteLine($"Records removed");
+            _logger.LogInformation("Record removed");
     }
 
     /// <summary>
-    /// Seek for the first entity in the provided json file, or default(T) if there's no entity or if the condition is not satisfied
+    /// Seek for the first entity in the provided json file, or default if there's no entity or if the condition is not satisfied
     /// </summary>
     /// <param name="condition"></param>
     /// <returns></returns>
     public async Task<T> FirstOrDefaultAsync(Func<T, bool> condition = null)
     {
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {
@@ -138,13 +154,12 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task<List<T>> ToListAsync()
     {
-        List<T> list = new List<T>();
+        List<T> list = new();
 
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {
@@ -162,13 +177,12 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task<IEnumerable<T>> Except(IEnumerable<T> entities, bool verbose = false)
     {
-        List<T> list = new List<T>();
+        List<T> list = new();
 
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {
@@ -176,10 +190,9 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
             {
                 list.Add(currentObject);
             }
-            else
+            else if (verbose)
             {
-                if (verbose)
-                    Console.WriteLine($"Record {currentObject} ignored");
+                _logger.LogInformation("Record {currentObject} ignored", currentObject);
             }
         }
 
@@ -193,11 +206,10 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task<bool> AnyAsync(Func<T, bool> condition = null)
     {
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {
@@ -211,19 +223,18 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     }
 
     /// <summary>
-    /// Seek for the last entity in the provided json file, or default(T) if there's no entity or if the condition is not satisfied
+    /// Seek for the last entity in the provided json file, or default if there's no entity or if the condition is not satisfied
     /// </summary>
     /// <param name="condition"></param>
     /// <returns></returns>
     public async Task<T> LastOrDefaultAsync(Func<T, bool> condition = null)
     {
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T response = default(T);
+        T response = default;
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {
@@ -241,13 +252,12 @@ public sealed class JsonController<T> : IJsonController<T> where T : IBaseJsonEn
     /// <returns></returns>
     public async Task<IEnumerable<T>> WhereAsync(Func<T, bool> condition)
     {
-        List<T> list = new List<T>();
+        List<T> list = new();
 
-        using var fileStream = File.OpenRead(jsonPath);
-
+        using var fileStream = File.OpenRead(_jsonPath);
         using var streamReader = new StreamReader(fileStream);
 
-        T currentObject = default(T);
+        T currentObject = default;
 
         while ((currentObject = JsonConvert.DeserializeObject<T>(await streamReader.ReadLineAsync() ?? "")) != null)
         {

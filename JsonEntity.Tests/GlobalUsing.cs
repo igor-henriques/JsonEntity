@@ -1,0 +1,10 @@
+global using Xunit;
+global using FluentAssertions;
+global using JsonEntity.Interfaces;
+global using JsonEntity.Library;
+global using Bogus;
+global using JsonEntity.Configurations;
+global using JsonEntity.Tests.Utils;
+global using Microsoft.Extensions.Logging;
+global using Moq;
+global using System.Runtime.CompilerServices;
